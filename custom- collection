@@ -432,11 +432,6 @@ void lightsout() {
     }
     powercell.show();
 
-    /******* for cyclotron off *******/
-    cyclotron.update();
-    cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
-    cyclotron.setBrightness(0, BOOT_DLY);
-
   }
 }
 
@@ -1128,6 +1123,40 @@ power_cell_idle();
                                    warning stage for 15 seconds
                                    vent stage
                                    return to safety2_read
+
+      poweroff = false;            //false
+      if (PowerBooted == false) {
+      PowerBooted = true;             //true
+      startpack = true;              // true
+
+      // turn on wand
+
+      if (!digitalRead(STARTWAND_SWITCH)&& (startpack == true) ) {
+      if (wand_on == false) {
+        mp3.playTrack(1);     // wand on sound
+        wand_on = true;
+        WANDledstate2();      // turns wand leds on
+        Serial.print("wand enabled");
+      //   safety1_read();        // read the first safety switch
+
+      }
+      else
+        mp3.playTrack(13);
+      wand_on = false;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
