@@ -23,7 +23,7 @@ void loop() {
 }
 
 
-// need to take control over this animation with brightness, delay to full brightness and speed control with some sort of rampup effect? //
+// need to take control over this animation with brightness, delay to full brightness and speed control with some sort of rampup effect?, speed needs to be faster too //
 
 const unsigned long cyc_interval = 0;      // interval at which to cycle lights (milliseconds).
 unsigned long prevCycMillis = 0;        // last time we changed a cyclotron light in the idle sequence
