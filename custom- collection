@@ -13,19 +13,16 @@
 
 */
 
-
+#include "afterlife_cyclotron.h"
 #include <Adafruit_NeoPixel.h>
 #include <Wire.h> // Include the I2C library (required)
 #include <SparkFunSX1509.h> // Include SX1509 library
-#include <MD_YX5300.h>
-#include <SoftwareSerial.h>
+#include "SerialMP3Player.h"
 
-// Connections for serial interface to the YX5300 sound module
-const uint8_t ARDUINO_RX = 18;    // connect to TX of MP3 Player module
-const uint8_t ARDUINO_TX = 19;    // connect to RX of MP3 Player module
-SoftwareSerial  MP3Stream(ARDUINO_RX, ARDUINO_TX);  // MP3 player serial stream for comms
-const uint8_t PLAY_FOLDER = 1;   // tracks are all placed in this folder
-MD_YX5300 mp3(MP3Stream);
+#define TX 19
+#define RX 18
+
+SerialMP3Player mp3(RX, TX);
 
 
 // Create a new POWERCELL object
@@ -60,37 +57,25 @@ const int NeoPixelLEDCount2 = 27;
 Adafruit_NeoPixel wandLights = Adafruit_NeoPixel(NeoPixelLEDCount2, NEO_WAND, NEO_GRB + NEO_KHZ800);
 
 
-#define LED_PIN    2
-#define pix 40
+#define PIN 2           // Which pin on the Arduino is connected to the NeoPixels?
+#define FIRE_PIN  9     // Which pin on the Arduino is connected to the "overheat" signal?
+#define NUMPIXELS 40    // How many NeoPixels are attached to the Arduino?
+#define BRIGHTNESS 255  // How bright should the pixels be? (min = 0, max = 255)
+#define GROUP 2         // How big of a group of pixels do you want to rotate?
+#define INIT_SPD  255   // How slow do you want the animation to rotate at the beginning of the boot? (higher = slower, 255 max)
+#define IDLE_SPD  2   // How fast do you want the animation to rotate during "normal" operation (lower = faster, 0 min)
+#define HEAT_SPD 0      // How fast do you want the animation to rotate at overheat? (lower = faster, 0 min)
+#define BOOT_DLY  5000  // How long do you want the boot animation to last?
+#define HEAT_DLY  5000  // How long should the "overheat" ramp up last?
 
-#define NEOspeed 36         //milliseconds until the next neopixel is in front. (lower is faster)
-#define BUTspeed 5         //Speed while button is pressed (lower is faster)
-#define NEOspeedTimer 79
-#define NEOtail  3         //length of fading tail (must be below pix count)
-//#define NEOtail  (analogRead(1)/(1024/pix))         //length of fading tail (must be below pix count)
-#define NEOcolor 0          //0-1023
-#define NEOcolorChange 0  //milliseconds until color change increment (lower is faster)
-#define NEOcolorIncrement 0 //color change increment (set it to 0 for no color change)
-#define NEOcolorFade 0     //color difference along the tail
-
-#define NEObrightnessMin 0      //0-255
-#define NEObrightnessMax 255      //0-255
-#define NEObrightnessTimer 20
-//#define NEObrightness (analogRead(0)/4)  //or you can use a knob to control brightness
-
-#define NEOdirection -1   // -1 for other direction
-
-Adafruit_NeoPixel strip(pix, LED_PIN, NEO_GRB + NEO_KHZ800);
-
-int tail;
-int dir;
-
+// Create a new cyclotron object
+Cyclotron cyclotron(PIN, NUMPIXELS, GROUP, INIT_SPD);
 
 const int STARTPACK_SWITCH = 5;  // main power
 const int STARTWAND_SWITCH = 6;  //wand power
 const int SAFETY_ONE = 7;
 const int SAFETY_TWO = 8;
-const int FIRE_PIN = 9;
+//const int FIRE_PIN = 9;
 const int MUSIC_SWITCH = 10; // music
 
 
@@ -117,19 +102,37 @@ const byte BAR_10 = 9;
 const byte BAR_11 = 10;
 const byte BAR_12 = 11;
 
-bool power = false;
-int playing = 0;
-bool playerPause = true;  // true if player is currently paused
+
+// Possible Pack states
 
 bool songplaying = true;
+bool power_up = false;
+bool wand_on = false;
+bool state1 = false;
+bool state2 = false;
+bool isFiring = false;      // keeps track of the firing state
+bool shouldWarn = false;    // track the warning state for alert audio
+bool shuttingDown = false;  // is the pack in the process of shutting down
+bool poweredDown = true;    // is the pack powered down
+bool venting = false;       // is the pack venting
+
+// physical switch states
+bool startup = false;
+bool safety_one = false;
+bool safety_two = false;
+bool fire = false;
+bool warning = false;
+
 
 void setup() {
+  mp3.showDebug(1);       // print what we are sending to the mp3 board.
 
-  
+  Serial.begin(9600);     // start serial interface
+  mp3.begin(9600);        // start mp3-communication
+  delay(500);             // wait for init
 
-  // initialize global libraries
-  MP3Stream.begin(MD_YX5300::SERIAL_BPS);
-  mp3.begin();
+  mp3.sendCommand(CMD_SEL_DEV, 0, 2);   //select sd-card
+  delay(500);             // wait for init
 
   //  for signal testing //
   pinMode(13, OUTPUT);
@@ -155,8 +158,8 @@ void setup() {
   powercell.begin();
   lastMeterResetTime = millis();
   powercell.clear();
-   WAND_LEDstateOFF();
- powercell_off();
+  WAND_LEDstateOFF();
+  powercell_off();
   // ***** Configure LED's in wand lights (Including Vent LEDs) ***** //
   wandLights.begin();
   wandLights.setBrightness(240);
@@ -164,28 +167,20 @@ void setup() {
 
 
   // *** cyclotron start ********
-
-  dir = NEOdirection;
-  strip.begin();
-  strip.show();
-  tail = min(NEOtail, pix) - 1;
+  cyclotron.setBrightness(0, 0);
+  cyclotron.start();
+  cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
 
   WAND_LEDstateOFF();
- powercell_off();
+  powercell_off();
 }
 
+char c;  // char from Serial
+char cmd = ' ';
+char cmd1 = ' ';
 
-long unsigned timer;
-long unsigned speedTimer;
-long unsigned speedTimerIncrement;
-long unsigned colorFadeTimer;
-long unsigned dirTimer;
-long unsigned brightnessTimer;
+
 int song = 0;
-int color = NEOcolor;
-int pixel = 0;
-int brightness = NEObrightnessMin;
-int speed = NEOspeed;
 
 
 /* Wand LED assighment
@@ -204,9 +199,9 @@ int speed = NEOspeed;
 */
 void loop() {
 
-    /*************************************************************************
-                                   Main Loop Function
-   *************************************************************************/
+  /*************************************************************************
+                                 Main Loop Function
+  *************************************************************************/
 
   /********sd card sounds in order - folder (01)********
     wand on - 1
@@ -226,44 +221,54 @@ void loop() {
     endfire silent - 15
     click - 16
     blast - 17
+    warning - 18
 
 
   ***************mp3 commands*********************
-    mp3.playStart();
-    mp3.playPause();
-    mp3.playStop();
-    mp3.playNext();
-    mp3.playPrev();
-    mp3.playTrack(t);
-    mp3.playSpecific(fldr, file);
-    mp3.playFolderRepeat(fldr);
-    mp3.playFolderShuffle(fldr);
-    mp3.playTrackRepeat(file);
-    mp3.volumeMute(cmd != 0);
-    mp3.volume(v);
-    mp3.volumeInc();
-    mp3.volumeDec();
-    mp3.queryEqualizer();
-    mp3.queryFile();
-    mp3.queryStatus();
-    mp3.queryVolume();
-    mp3.queryFolderCount();
-    mp3.queryFilesCount();
-    mp3.queryFolderFiles(fldr);
-    mp3.sleep();
-    mp3.wakeUp();
-    mp3.reset();
-    mp3.equalizer(e);
-    mp3.shuffle(cmd != 0);
-    mp3.repeat(cmd != 0);
-    setSynchMode(cmd != 0);
-    setCallbackMode(cmd != 0);
+
+        mp3.play(nval);
+                      ("Play Folder");
+        mp3.playF(nval);
+        Serial.println("Play loop");
+       mp3.playSL(nval);
+        Serial.println("Play file at 30 volume");
+        mp3.play(nval,30);
+        Serial.println("Play");
+        mp3.play();
+        Serial.println("Pause");
+        mp3.pause();
+        Serial.println("Stop");
+        mp3.stop();
+        Serial.println("Next");
+        mp3.playNext();
+        Serial.println("Previous");
+        mp3.playPrevious();
+        Serial.println("Volume UP");
+        mp3.volUp();
+        Serial.println("Volume Down");
+        mp3.volDown();
+        Serial.println("Set to Volume");
+          mp3.setVol(nval);
+          mp3.qVol();
+        Serial.println("Query current file");
+        mp3.qPlaying();
+        Serial.println("Query status");
+        mp3.qStatus();
+        Serial.println("Query folder count");
+        mp3.qTFolders();
+        Serial.println("Query total file count");
+        mp3.qTTracks();
+        mp3.reset();
+        mp3.sleep();
+        mp3.wakeup();
+
+
 
   ****************/
 
   // put your main code here, to run repeatedly:
   unsigned long currentMillis = millis();
-   // song selection
+  // song selection
   int theme_switch = digitalRead(MUSIC_SWITCH);
 
   if (theme_switch == LOW  ) {
@@ -272,22 +277,22 @@ void loop() {
     if (song > 6)song = 1;
     switch (song) {
       case 1:
-        mp3.playTrack(3);
+        mp3.play(3);
         break;
       case 2 :
-        mp3.playTrack(4);
+        mp3.play(4);
         break;
       case 3:
-        mp3.playTrack(5);
+        mp3.play(5);
         break;
       case 4 :
-        mp3.playTrack(6);
+        mp3.play(6);
         break;
       case 5 :
-        mp3.playTrack(7);
+        mp3.play(7);
         break;
       case 6:
-        mp3.playFolderShuffle(1);
+        mp3.stop();
         break;
     }
     songplaying = false;
@@ -295,126 +300,70 @@ void loop() {
 
 
   /* const int STARTPACK_SWITCH = 5;  // main power
-const int STARTWAND_SWITCH = 6;  //wand power
-const int SAFETY_ONE = 7;
-const int SAFETY_TWO = 8;
-const int FIRE_PIN = 9;*/
+    const int STARTWAND_SWITCH = 6;  //wand power
+    const int SAFETY_ONE = 7;
+    const int SAFETY_TWO = 8;
+    const int FIRE_PIN = 9;*/
 
- if (!digitalRead(STARTPACK_SWITCH)){ // if button is pressed
-    if (power==false) {             // and the status flag is LOW
-      power=true;                  // make status flag HIGH     
-    mp3.playTrack(8);
+  if (!digitalRead(STARTPACK_SWITCH)) { // if button is pressed
+    cyclotron.update();
+    Serial.println ("power on");
+    //   mp3.play(8);
     powercell_idle();
     wand_charge();
-
-    /* if (packidle == true){
-      /******************************************** HERE IS THE MAGIC/IDLE/ begin reading STAGE*******************************************************************
-        setWandLightState(12, 0, 0);    // sloblo red
-         setWandLightState(19, 6, currentMillis); // Set orange hat barrel flashing
-         setWandLightState(18, 9, 0); // set back led green
-
-        barGraphSequenceOne(currentMillis);
-        power_cell_idle();
-         mp3.playTrack(10);
-      } else
-
-      packidle == false;
-
-       /***********************************************************************************************************************************
-
-      // need this track  ( 8 ) to play for 12 seconds
-      // before moving onto the idle stage but not interfering with the bargraph charging or charging sequence from the wand
-
-
-      /* here we need to read these in order to enable heat pin to work and to start the warning and venting procedure
-
-      read STARTPACK_SWITCH - if condition is met  -  run idle stage
-      read STARTWAND_SWITCH - if condition is met  -  run idle stage - read >>(safety one)
-                             if not, do nothing.
-               SAFETY_ONE -  if condition is met, -  run safety1_read - read >> (safety two)
-                             if not, return to idle stage.
-               SAFETY_TWO -  if condition is met - run safety2_read - read >> (HEAT_PIN)
-                             if not, return to safety one.
-                HEAT_PIN  -  if condition is met - run fire_seq >> (warning procedure)
-                             if not, return to safety two.
-      (warning procedure) -  if HEAT_PIN is pressed for 15 seconds -
-                             enter warning stage
-                             warning stage for 15 seconds
-                             vent stage
-                             return to safety2_read
-  */
-  
-  
-  
-  
-  
-  
-  
-  
-  
-    
-      }                           // 
-    else {                        // otherwise...
-      power=false;                  // make status flag LOW
- WAND_LEDstateOFF();
- powercell_off();
- 
-     // -- code
+    cyclotron.setBrightness(BRIGHTNESS, BOOT_DLY);
+    cyclotron.update();
+    cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
+    power_up = true;
+    if ((power_up)&&(wand_on ==false)){
+      mp3.play(8);
+      wand_on = true;
     }
- }
+     if (!digitalRead(STARTWAND_SWITCH)) {
+          WAND_ledstate2();
+         
+            Serial.println ("wand on");
+          if ((power_up == true) && (wand_on == true)){    
+         mp3.play(1); 
+             state1 = true; 
+          } 
+          else
+          state1 = false;
+     }  
+        
+   
+  
+
+
+
+
+
+
+
+
+
+  }                          //
+  else {                        // otherwise...
+    cyclotron.update();
+    WAND_LEDstateOFF();
+    cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
+    cyclotron.setBrightness(0, BOOT_DLY);
+     //mp3.play(9);
+    powercell_off();
+    Serial.println ("power off");
+  power_up = false;
+  
+
+
+  }
 }
+
 
 
 
 
 
 /* -------------------------------------------------------------    SEQUENCES    -----------------------------------------------------------------*/
-void cyc_start () {
-  unsigned long currentMillis = millis();
-
-  if (currentMillis > speedTimer) {
-    pixel = (pixel + pix + dir);
-    pixel %= pix;
-    for (int a = 0; a < tail; a++) {
-      setPixel((pixel + pix) + (a * dir), color + (a * NEOcolorFade), (((255 / tail)*a)*brightness) / 255);
-    }
-    strip.show();
-    for (int a = 0; a < pix; a++) {
-      strip.setPixelColor(a, 0, 0, 0);
-    }
-    speedTimer += speed;
-  }
-
-  if (currentMillis > colorFadeTimer) {
-    color += NEOcolorIncrement;
-    color %= 1024;
-    colorFadeTimer += NEOcolorChange;
-  }
-
-  if (currentMillis > brightnessTimer) {
-    brightness = min(NEObrightnessMax, max(NEObrightnessMin, brightness + (!digitalRead(STARTPACK_SWITCH) * 2) - 1));
-    brightnessTimer += NEObrightnessTimer;  
-    
-  }
-  if (currentMillis > speedTimerIncrement) {
-    speedTimerIncrement += NEOspeedTimer;
-    speed = min(NEOspeed, max(BUTspeed, speed + (digitalRead(STARTPACK_SWITCH) * 2) - 1));
-  
-  }
-}
-
-
-void setPixel(int pixelz, double colorz, long unsigned fadez) {
-  fadez *= fadez; //these two lines turn the dimming
-  fadez /= 255;  //from linear to logarithmic
-  pixelz %= pix;
-  strip.setPixelColor(pixelz, strip.ColorHSV(colorz * 64, 255, fadez));
-}
-
-
-
-
-
 
 
 void doCycle() {
@@ -441,7 +390,7 @@ void powercell_off() {
   unsigned long currentMillis = millis();
   for (int i = 0; i < PM_PIXELS; i++)  {
     powercell.setPixelColor(i,  powercell.Color(0, 0, 0));
-  }  
+  }
   powercell.show();
 }
 
@@ -713,23 +662,23 @@ void fireStrobe(unsigned long currentMillis) {
 }
 
 void wand_charge() {
-    unsigned long currentMillis = millis();
-    setWandLightState(12, 12, currentMillis);    // sloblo red slow flash
-    setWandLightState(13, 4, 0);    //  vent start off
-    setWandLightState(14, 4, 0);    //  vent mid   off
-    setWandLightState(15, 4, 0);    // vent end   off
-    setWandLightState(16, 4, 0 );     // theme led off
-    setWandLightState(17, 4, 0);    //  white led off
-    setWandLightState(18, 4, 0);    // white led off
-    setWandLightState(19, 10, currentMillis); // Set orange hat barrel flashing
-    setVentLightState(ventStart, ventEnd, 2);
+  unsigned long currentMillis = millis();
+  setWandLightState(12, 12, currentMillis);    // sloblo red slow flash
+  setWandLightState(13, 4, 0);    //  vent start off
+  setWandLightState(14, 4, 0);    //  vent mid   off
+  setWandLightState(15, 4, 0);    // vent end   off
+  setWandLightState(16, 4, 0 );     // theme led off
+  setWandLightState(17, 4, 0);    //  white led off
+  setWandLightState(18, 4, 0);    // white led off
+  setWandLightState(19, 10, currentMillis); // Set orange hat barrel flashing
+  setVentLightState(ventStart, ventEnd, 2);
 
 }
 
 void WAND_ledstate2() {
 
-   unsigned long currentMillis = millis();
- 
+  unsigned long currentMillis = millis();
+
   setWandLightState(12, 0, 0);    // sloblo red
   setWandLightState(13, 4, 0);    //  vent start white off
   setWandLightState(14, 4, 0);    //  vent mid   white off
@@ -741,9 +690,9 @@ void WAND_ledstate2() {
   setVentLightState(ventStart, ventEnd, 2);
 }
 
-void WAND_ledstate3() { 
+void WAND_ledstate3() {
   unsigned long currentMillis = millis();
-  
+
   setWandLightState(12, 0, 0);    // sloblo red
   setWandLightState(13, 1, 0);    //  vent start white
   setWandLightState(14, 1, 0);    //  vent mid   white
