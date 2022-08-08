@@ -345,15 +345,16 @@ void loop() {
 
       /* this is the order to enable heat pin to work and to start the warning and venting procedure
 
-      read STARTPACK_SWITCH - if condition is met  -  run idle stage
-      read STARTWAND_SWITCH - if condition is met  -  run idle stage - read >>(safety one)
-                             if not return to previous (STARTPACK_SWITCH)
+      read STARTPACK_SWITCH - if condition is on -  start pack and run charging stage
+                              if off - do nothing
+      read STARTWAND_SWITCH - if condition is on  -  run idle stage - read >>(safety one)
+                             if off return to previous (STARTPACK_SWITCH)
                              
                              
                SAFETY_ONE - toggle switch 
                
                              if condition is on - read >> (safety two)
-                             if not, return to startwand stage.
+                             if off, return to startwand stage.
                              
                SAFETY_TWO - toggle switch 
                
