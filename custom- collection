@@ -110,14 +110,10 @@ bool power_up = false;
 bool wand_on = false;
 bool state1 = false;
 bool state2 = false;
-bool isFiring = false;      // keeps track of the firing state
-bool shouldWarn = false;    // track the warning state for alert audio
-bool shuttingDown = false;  // is the pack in the process of shutting down
-bool poweredDown = true;    // is the pack powered down
-bool venting = false;       // is the pack venting
+
 
 // physical switch states
-bool startup = false;
+
 bool safety_one = false;
 bool safety_two = false;
 bool fire = false;
@@ -308,31 +304,49 @@ void loop() {
   if (!digitalRead(STARTPACK_SWITCH)) { // if button is pressed
     cyclotron.update();
     Serial.println ("power on");
-    //   mp3.play(8);
+    barGraphCHARGING (currentMillis);
     powercell_idle();
     wand_charge();
     cyclotron.setBrightness(BRIGHTNESS, BOOT_DLY);
-    cyclotron.update();
     cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
     power_up = true;
-    if ((power_up)&&(wand_on ==false)){
+    if ((power_up) && (wand_on == false)) {
       mp3.play(8);
       wand_on = true;
     }
-     if (!digitalRead(STARTWAND_SWITCH)) {
-          WAND_ledstate2();
-         
-            Serial.println ("wand on");
-          if ((power_up == true) && (wand_on == true)){    
-         mp3.play(1); 
-             state1 = true; 
-          } 
-          else
-          state1 = false;
-     }  
-        
+    // ***********do not touch above this line ***********  SERIOUSLY!! ********** DONT! *********  PLEASE? *****************
    
-  
+    
+    
+    // need this track  ( 8 ) to play for 12 seconds
+      // before moving onto the idle stage but not interfering with the bargraph charging or charging sequence from the wand
+
+
+      /* this is the order to enable heat pin to work and to start the warning and venting procedure
+
+      read STARTPACK_SWITCH - if condition is met  -  run idle stage
+      read STARTWAND_SWITCH - if condition is met  -  run idle stage - read >>(safety one)
+                             if not return to previous (STARTPACK_SWITCH)
+                             READ SAFETY_ONE,
+                             
+               SAFETY_ONE -  if condition is met, -  run safety1_read - read >> (safety two)
+                             if not, return to idle stage.
+                             
+               SAFETY_TWO -  if condition is met - run safety2_read - read >> (FIRE_PIN)
+                             if not, return to safety one.
+                             
+                FIRE_PIN  -  if condition is met - run fire_seq >> (warning procedure)
+                             if not, return to safety two.
+                             
+      (warning procedure) -  if FIRE_PIN is pressed for 15 seconds -
+                             enter warning stage
+                             (WAND LED STATE CHANGE)
+                             
+                             warning stage for 15 seconds
+                             
+                             vent stage
+                             return to safety2_read
+  */
 
 
 
@@ -342,21 +356,38 @@ void loop() {
 
 
 
-  }                          //
-  else {                        // otherwise...
+
+
+
+
+
+
+
+
+
+
+
+  }
+  else {
+
+    // mp3.play(9);
     cyclotron.update();
     WAND_LEDstateOFF();
     cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
     cyclotron.setBrightness(0, BOOT_DLY);
-     //mp3.play(9);
+
     powercell_off();
     Serial.println ("power off");
-  power_up = false;
-  
-
+    power_up = false;
+    wand_on = false;
+    // mp3.pause();
 
   }
 }
+
+
+
+
 
 
 
