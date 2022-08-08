@@ -121,6 +121,9 @@ bool warning = false;
 
 
 void setup() {
+  if (!io.begin(ADDRESS)) {
+    while (1) ;
+  }
   mp3.showDebug(1);       // print what we are sending to the mp3 board.
 
   Serial.begin(9600);     // start serial interface
@@ -169,6 +172,23 @@ void setup() {
 
   WAND_LEDstateOFF();
   powercell_off();
+
+  // configuration for the bargraph LED's
+  io.pinMode(BAR_01, OUTPUT);
+  io.pinMode(BAR_02, OUTPUT);
+  io.pinMode(BAR_03, OUTPUT);
+  io.pinMode(BAR_04, OUTPUT);
+  io.pinMode(BAR_05, OUTPUT);
+  io.pinMode(BAR_06, OUTPUT);
+  io.pinMode(BAR_07, OUTPUT);
+  io.pinMode(BAR_08, OUTPUT);
+  io.pinMode(BAR_09, OUTPUT);
+  io.pinMode(BAR_10, OUTPUT);
+  io.pinMode(BAR_11, OUTPUT);
+  io.pinMode(BAR_12, OUTPUT);
+
+shutdown_leds();
+
 }
 
 char c;  // char from Serial
@@ -315,8 +335,9 @@ void loop() {
       wand_on = true;
     }
     // ***********do not touch above this line ***********  SERIOUSLY!! ********** DONT! *********  PLEASE? *****************
-   
-    
+
+
+      
     
     // need this track  ( 8 ) to play for 12 seconds
       // before moving onto the idle stage but not interfering with the bargraph charging or charging sequence from the wand
@@ -327,15 +348,21 @@ void loop() {
       read STARTPACK_SWITCH - if condition is met  -  run idle stage
       read STARTWAND_SWITCH - if condition is met  -  run idle stage - read >>(safety one)
                              if not return to previous (STARTPACK_SWITCH)
-                             READ SAFETY_ONE,
                              
-               SAFETY_ONE -  if condition is met, -  run safety1_read - read >> (safety two)
-                             if not, return to idle stage.
                              
-               SAFETY_TWO -  if condition is met - run safety2_read - read >> (FIRE_PIN)
+               SAFETY_ONE - toggle switch 
+               
+                             if condition is on - read >> (safety two)
+                             if not, return to startwand stage.
+                             
+               SAFETY_TWO - toggle switch 
+               
+                             if condition is on - read >> (FIRE_PIN)
                              if not, return to safety one.
                              
-                FIRE_PIN  -  if condition is met - run fire_seq >> (warning procedure)
+                FIRE_PIN  -  push button
+                 
+                             if condition is pressed - run fire_seq >> (warning procedure)
                              if not, return to safety two.
                              
       (warning procedure) -  if FIRE_PIN is pressed for 15 seconds -
@@ -345,7 +372,9 @@ void loop() {
                              warning stage for 15 seconds
                              
                              vent stage
-                             return to safety2_read
+                             return to safety 2 stage, ready to read fire again
+
+                             
   */
 
 
@@ -871,7 +900,7 @@ void barGraphSequenceTwo(unsigned long currentMillis) {
 // This is the bargraph CHARGING sequence
 unsigned long prevBarCHARGEMillis = 0;          // bargraph on tracker
 const unsigned long CHARGE_interval = 700;     // interval at which to charge lights (milliseconds).
-bool CHARGESequenceOne = false;
+bool CHARGESequenceOne = true;
 
 void barGraphCHARGING(unsigned long currentMillis) {
   // normal sync animation on the bar graph
@@ -884,18 +913,17 @@ void barGraphCHARGING(unsigned long currentMillis) {
       switch_graph_led(seq_1_current, HIGH);
       seq_1_current++;
       if ( seq_1_current > num_led ) {
-
+        CHARGESequenceOne = false;
       }
     } else {
       switch_graph_led(seq_1_current, LOW);
       seq_1_current--;
       if ( seq_1_current < 0  ) {
-
+        CHARGESequenceOne = true;
       }
     }
   }
 }
-
 
 /************************* Shutdown and helper functions ****************************/
 void shutdown_leds() {
