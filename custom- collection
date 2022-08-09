@@ -107,7 +107,7 @@ const byte BAR_12 = 11;
 
 bool songplaying = true;
 bool power_up = false;
-bool wand_on = false;
+bool startup = false;
 bool state1 = false;
 bool state2 = false;
 
@@ -119,6 +119,9 @@ bool safety_two = false;
 bool fire = false;
 bool warning = false;
 
+// mp3 timers
+
+const unsigned long mp3_delay = 5000;
 
 void setup() {
   if (!io.begin(ADDRESS)) {
@@ -187,7 +190,7 @@ void setup() {
   io.pinMode(BAR_11, OUTPUT);
   io.pinMode(BAR_12, OUTPUT);
 
-shutdown_leds();
+  shutdown_leds();
 
 }
 
@@ -282,11 +285,24 @@ void loop() {
 
   ****************/
 
+  /* const int STARTPACK_SWITCH = 5;  // main power
+    const int STARTWAND_SWITCH = 6;  //wand power
+    const int SAFETY_ONE = 7;
+    const int SAFETY_TWO = 8;
+    const int FIRE_PIN = 9;*/
+    
   // put your main code here, to run repeatedly:
   unsigned long currentMillis = millis();
+int startpack = digitalRead (STARTPACK_SWITCH);
+int startwand = digitalRead(STARTWAND_SWITCH);
+int safe1 = digitalRead (SAFETY_ONE);
+int safe2 = digitalRead (SAFETY_TWO);
+int fire = digitalRead (FIRE_PIN);
+
+  
   // song selection
   int theme_switch = digitalRead(MUSIC_SWITCH);
-
+  
   if (theme_switch == LOW  ) {
     if (songplaying == true)
       song ++;
@@ -314,69 +330,75 @@ void loop() {
     songplaying = false;
   } else songplaying = true;
 
-
-  /* const int STARTPACK_SWITCH = 5;  // main power
-    const int STARTWAND_SWITCH = 6;  //wand power
-    const int SAFETY_ONE = 7;
-    const int SAFETY_TWO = 8;
-    const int FIRE_PIN = 9;*/
-
-  if (!digitalRead(STARTPACK_SWITCH)) { // if button is pressed
-    cyclotron.update();               // must be called before each cyclotron change
+  if (startpack == LOW) { // if button is pressed
+    cyclotron.update();
     Serial.println ("power on");
-    barGraphCHARGING (currentMillis);      // bargraph sx1509 charging sequence
-    powercell_idle();                      // powercell idle - this does not change until vent state
-    wand_charge();                           // wand charge sequence
+    barGraphCHARGING (currentMillis);
+    powercell_idle();
+    wand_charge();
     cyclotron.setBrightness(BRIGHTNESS, BOOT_DLY);
     cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
     power_up = true;
-    if ((power_up) && (wand_on == false)) {
-      mp3.play(8);                                // power on sound
-      wand_on = true;
+    if ((power_up) && (startup == false)) {
+      mp3.play(8);
+      startup = true;
     }
     // ***********do not touch above this line ***********  SERIOUSLY!! ********** DONT! *********  PLEASE? *****************
 
-
+    if (startwand == LOW) { // if button is pressed
+       if (startpack == LOW) 
+      state1=true;
+      cyclotron.update();
+      Serial.println ("wand on");
+      barGraphSequenceOne(currentMillis);
+        setWandLightState(18, 1, 0);    // white led flash
+  setWandLightState(19, 6, currentMillis); // Set orange hat barrel flashing
+    setWandLightState(12, 0, currentMillis); // Set slo blo flashing
+      cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
+      powercell_idle();
+     // mp3.play(1);
       
-    
+    }
+
+
     // need this track  ( 8 ) to play for 12 seconds
-      // before moving onto the idle stage but not interfering with the bargraph charging or charging sequence from the wand
+    // before moving onto the idle stage but not interfering with the bargraph charging or charging sequence from the wand
 
 
-      /* this is the order to enable heat pin to work and to start the warning and venting procedure
+    /* this is the order to enable heat pin to work and to start the warning and venting procedure
 
       read STARTPACK_SWITCH - if condition is on -  start pack and run charging stage
-                              if off - do nothing
+                            if off - do nothing
       read STARTWAND_SWITCH - if condition is on  -  run idle stage - read >>(safety one)
-                             if off return to previous (STARTPACK_SWITCH)
-                             
-                             
-               SAFETY_ONE - toggle switch 
-               
-                             if condition is on - read >> (safety two)
-                             if off, return to startwand stage.
-                             
-               SAFETY_TWO - toggle switch 
-               
-                             if condition is on - read >> (FIRE_PIN)
-                             if not, return to safety one.
-                             
-                FIRE_PIN  -  push button
-                 
-                             if condition is pressed - run fire_seq >> (warning procedure)
-                             if not, return to safety two.
-                             
-      (warning procedure) -  if FIRE_PIN is pressed for 15 seconds -
-                             enter warning stage
-                             (WAND LED STATE CHANGE)
-                             
-                             warning stage for 15 seconds
-                             
-                             vent stage
-                             return to safety 2 stage, ready to read fire again
+                           if off return to previous (STARTPACK_SWITCH)
 
-                             
-  */
+
+             SAFETY_ONE - toggle switch
+
+                           if condition is on - read >> (safety two)
+                           if off, return to startwand stage.
+
+             SAFETY_TWO - toggle switch
+
+                           if condition is on - read >> (FIRE_PIN)
+                           if not, return to safety one.
+
+              FIRE_PIN  -  push button
+
+                           if condition is pressed - run fire_seq >> (warning procedure)
+                           if not, return to safety two.
+
+      (warning procedure) -  if FIRE_PIN is pressed for 15 seconds -
+                           enter warning stage
+                           (WAND LED STATE CHANGE)
+
+                           warning stage for 15 seconds
+
+                           vent stage
+                           return to safety 2 stage, ready to read fire again
+
+
+    */
 
 
 
@@ -403,13 +425,13 @@ void loop() {
     // mp3.play(9);
     cyclotron.update();
     WAND_LEDstateOFF();
-    cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);           // cyclotron slowdown
+    cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
     cyclotron.setBrightness(0, BOOT_DLY);
-
+ shutdown_leds();
     powercell_off();
     Serial.println ("power off");
     power_up = false;
-    wand_on = false;
+    startup = false;
     // mp3.pause();
 
   }
