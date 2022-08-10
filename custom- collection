@@ -108,7 +108,7 @@ const byte BAR_12 = 11;
 bool songplaying = true;
 bool power_up = false;
 bool startup = false;
-bool state1 = false;
+bool state1 = true;
 bool state2 = false;
 
 
@@ -290,19 +290,19 @@ void loop() {
     const int SAFETY_ONE = 7;
     const int SAFETY_TWO = 8;
     const int FIRE_PIN = 9;*/
-    
+
   // put your main code here, to run repeatedly:
   unsigned long currentMillis = millis();
-int startpack = digitalRead (STARTPACK_SWITCH);
-int startwand = digitalRead(STARTWAND_SWITCH);
-int safe1 = digitalRead (SAFETY_ONE);
-int safe2 = digitalRead (SAFETY_TWO);
-int fire = digitalRead (FIRE_PIN);
+  int startpack = digitalRead (STARTPACK_SWITCH);
+  int startwand = digitalRead(STARTWAND_SWITCH);
+  int safe1 = digitalRead (SAFETY_ONE);
+  int safe2 = digitalRead (SAFETY_TWO);
+  int fire = digitalRead (FIRE_PIN);
 
-  
+
   // song selection
   int theme_switch = digitalRead(MUSIC_SWITCH);
-  
+
   if (theme_switch == LOW  ) {
     if (songplaying == true)
       song ++;
@@ -331,33 +331,33 @@ int fire = digitalRead (FIRE_PIN);
   } else songplaying = true;
 
   if (startpack == LOW) { // if button is pressed
-    cyclotron.update();
-    Serial.println ("power on");
-    barGraphCHARGING (currentMillis);
-    powercell_idle();
-    wand_charge();
-    cyclotron.setBrightness(BRIGHTNESS, BOOT_DLY);
-    cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
-    power_up = true;
-    if ((power_up) && (startup == false)) {
-      mp3.play(8);
-      startup = true;
+    if (state1) {
+      cyclotron.update();
+      Serial.println ("power on");
+      barGraphCHARGING (currentMillis);
+      powercell_idle();
+      wand_charge();
+      cyclotron.setBrightness(BRIGHTNESS, BOOT_DLY);
+      cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
+      power_up = true;
+      if ((power_up) && (startup == false)) {
+        mp3.play(8);
+        startup = true;
+      }
     }
-    // ***********do not touch above this line ***********  SERIOUSLY!! ********** DONT! *********  PLEASE? *****************
 
+    // ***********do not touch above this line ***********  SERIOUSLY!! ********** DONT! *********  PLEASE? *****************
     if (startwand == LOW) { // if button is pressed
-       if (startpack == LOW) 
-      state1=true;
       cyclotron.update();
       Serial.println ("wand on");
       barGraphSequenceOne(currentMillis);
-        setWandLightState(18, 1, 0);    // white led flash
-  setWandLightState(19, 6, currentMillis); // Set orange hat barrel flashing
-    setWandLightState(12, 0, currentMillis); // Set slo blo flashing
+      setWandLightState(18, 1, 0);    // white led flash
+      setWandLightState(19, 6, currentMillis); // Set orange hat barrel flashing
+      setWandLightState(12, 0, currentMillis); // Set slo blo flashing
       cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
       powercell_idle();
-     // mp3.play(1);
-      
+      // mp3.play(1);
+
     }
 
 
@@ -399,35 +399,17 @@ int fire = digitalRead (FIRE_PIN);
 
 
     */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   }
-  else {
 
+
+  else {
+    state1 = true;
     // mp3.play(9);
     cyclotron.update();
     WAND_LEDstateOFF();
     cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
     cyclotron.setBrightness(0, BOOT_DLY);
- shutdown_leds();
+    shutdown_leds();
     powercell_off();
     Serial.println ("power off");
     power_up = false;
@@ -436,16 +418,6 @@ int fire = digitalRead (FIRE_PIN);
 
   }
 }
-
-
-
-
-
-
-
-
-
-
 /* -------------------------------------------------------------    SEQUENCES    -----------------------------------------------------------------*/
 
 
