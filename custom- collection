@@ -344,6 +344,7 @@ void loop() {
         mp3.play(8);
         startup = true;
       }
+
     }
 
     // ***********do not touch above this line ***********  SERIOUSLY!! ********** DONT! *********  PLEASE? *****************
@@ -357,7 +358,9 @@ void loop() {
       cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
       powercell_idle();
       // mp3.play(1);
-
+      state1 = false;
+    } else {
+      state1 = true;
     }
 
 
@@ -403,7 +406,6 @@ void loop() {
 
 
   else {
-    state1 = true;
     // mp3.play(9);
     cyclotron.update();
     WAND_LEDstateOFF();
