@@ -50,7 +50,8 @@ const int WhiteLED2 = 18;
 const int OrangeHatLED = 19;
 const int GunLEDStart = 20;
 const int GunLEDEnd = 26;
-
+unsigned long firePrev, firingTimer = 0;
+bool play14=false;
 // Vent + Wand LED Count
 const int NeoPixelLEDCount2 = 27;
 
@@ -377,6 +378,24 @@ void loop() {
           setWandLightState(17, 2, 0);
           //setWandLightState(18, 1, 0);
           // mp3.play(11);
+          int fire = digitalRead (FIRE_PIN);
+          if (fire == LOW) { // firing squad lol
+            firingTimer = millis();
+            Serial.println("fire button pressed");
+            if (firingTimer - firePrev > 10000) {
+              firePrev = millis();
+              play14 = true;
+            }
+            fireStrobe(currentMillis);
+            //mp3.play(17);
+          }
+          else {
+            if (play14) {
+              Serial.println("fire button released before 10 seconds");
+              play14 = false;
+              // mp3.play(14);
+            }
+          }
         } else {
           if (safeTwo) {
             setWandLightState(13, 4, 0);    //  vent start off
