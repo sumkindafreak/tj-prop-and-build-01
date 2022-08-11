@@ -332,13 +332,15 @@ void loop() {
     songplaying = false;
   } else songplaying = true;
 
-  if (startpack == LOW) { // if button is pressed
+ if (startpack == LOW) { // if button is pressed
     if (state1) {
       cyclotron.update();
       Serial.println ("power on");
       barGraphCHARGING (currentMillis);
       powercell_idle();
-      wand_charge();
+    setWandLightState(12, 7, currentMillis); // Set slo blo on
+            setWandLightState(19, 4, 0); // Set off
+           setWandLightState(18, 4, 0); // Set off
       cyclotron.setBrightness(BRIGHTNESS, BOOT_DLY);
       cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
       power_up = true;
@@ -348,17 +350,17 @@ void loop() {
       }
 
     }
-
+    
     // ***********do not touch above this line ***********  SERIOUSLY!! ********** DONT! *********  PLEASE? *****************
     if (startwand == LOW) { // if button is pressed
       cyclotron.update();
       Serial.println ("wand on");
       barGraphSequenceOne(currentMillis);
       if (digitalRead (SAFETY_ONE)) {// so that color dont mix up
-        setWandLightState(18, 1, 0);    // white led flash
+        setWandLightState(18, 9, 0);    // white led flash
       }
       setWandLightState(19, 6, currentMillis); // Set orange hat barrel flashing
-      setWandLightState(12, 0, currentMillis); // Set slo blo flashing
+      setWandLightState(12, 0, 0); // Set slo blo flashing
       cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
       powercell_idle();
       // mp3.play(1);
@@ -368,15 +370,21 @@ void loop() {
       if (safe1 == LOW) {// safety swicth 1
         safeOff = true;
         Serial.println("safety one on");
-        setWandLightState(18, 9, 0);
+       setWandLightState(18, 14, currentMillis);
+        setWandLightState(17, 2, 0);
         //mp3.play(11);
         int safe2 = digitalRead (SAFETY_TWO);
         if (safe2 == LOW) {
           safeTwo = true;
           Serial.println("safety 2 on");
-          // WAND_ledstate3();
+            
           setWandLightState(17, 2, 0);
-          //setWandLightState(18, 1, 0);
+          //setWandLightState(18, 13, currentMillis);
+          setWandLightState(16, 15, currentMillis); 
+          
+               setWandLightState(13, 1, 0);    //  vent start 
+            setWandLightState(14, 2, 0);    //  vent mid  
+            setWandLightState(15, 1, 0);    // vent end  
           // mp3.play(11);
           int fire = digitalRead (FIRE_PIN);
           if (fire == LOW) { // firing squad lol
@@ -391,15 +399,15 @@ void loop() {
             if (firingTimer - firePrev > 20000) {
               Serial.println("fire button pressed greater than 20 sec");
               setVentLightState(ventStart, ventEnd, 0);
-              WAND_LEDstateOFF();
-              // mp3.play(2);
+             // WAND_LEDstateOFF();
+              mp3.play(2);
               barGraphCHARGING (currentMillis);
-              wand_charge();
+            //  wand_charge();
             }
             if (firingTimer - firePrev > 10000 && firingTimer - firePrev > 20000) {
               Serial.println("fire button pressed greater than 10 sec");
               // firePrev = millis();
-              mp3.play(18);
+           //   mp3.play(18);
               play14 = true;
             }
 
@@ -415,9 +423,12 @@ void loop() {
           }
         } else {
           if (safeTwo) {
-            setWandLightState(13, 4, 0);    //  vent start off
+             setWandLightState(13, 4, 0);    //  vent start off
             setWandLightState(14, 4, 0);    //  vent mid   off
             setWandLightState(15, 4, 0);    // vent end   off
+               setWandLightState(19, 4, 0); // Set orange hat barrel flashing
+           setWandLightState(18, 4, 0); // Set orange hat barrel flashing
+           
             safeTwo = false;
           }
         }
@@ -425,6 +436,10 @@ void loop() {
       else {
         if (safeOff) {
           mp3.play(16);
+             setWandLightState(19, 4, 0); // Set orange hat barrel flashing
+           setWandLightState(18, 4, 0); // Set orange hat barrel flashing
+           setWandLightState(17, 4, 0); // Set orange hat barrel flashing
+           setWandLightState(17, 4, 0);
           safeOff = false;
         }
       }
@@ -534,7 +549,7 @@ unsigned long prevFlashMillis6 = 0; // Last time we changed wand sequence 6
 unsigned long prevFlashMillis7 = 0; // Last time we changed wand sequence 7
 unsigned long prevFlashMillis8 = 0; // Last time we changed wand sequence 8
 unsigned long prevFlashMillis9 = 0; // Last time we changed wand sequence 8
-
+unsigned long prevFlashMillis10 = 0; // Last time we changed wand sequence 8
 bool flashState1 = false;
 bool flashState2 = false;
 bool flashState3 = false;
@@ -544,9 +559,11 @@ bool flashState6 = false;
 bool flashState7 = false;
 bool flashState8 = false;
 bool flashState9 = false;
-const unsigned long wandFastFlashInterval = 400; // interval at which we flash the top led on the wand
+bool flashState10 = false;
+const unsigned long wandFastFlashInterval = 200; // interval at which we flash the top led on the wand
 const unsigned long wandMediumFlashInterval = 700; // interval at which we flash the top led on the wand
-const unsigned long wandSlowFlashInterval = 1000; // interval at which we flash the slow led on the wand
+const unsigned long wandSlowFlashInterval = 1200; // interval at which we flash the slow led on the wand
+const unsigned long instantFlashInterval = 1300; // interval at which we flash the instant led on the wand
 void setWandLightState(int lednum, int state, unsigned long currentMillis) {
   switch ( state ) {
     case 0: // set led red
@@ -652,7 +669,7 @@ void setWandLightState(int lednum, int state, unsigned long currentMillis) {
       }
       break;
     case 13: // slower white flashing
-      if ((unsigned long)(currentMillis - prevFlashMillis7) >= wandSlowFlashInterval) {
+      if ((unsigned long)(currentMillis - prevFlashMillis8) >= wandSlowFlashInterval) {
         prevFlashMillis8 = currentMillis;
         if ( flashState8 == false ) {
           wandLights.setPixelColor(lednum, wandLights.Color(255, 255, 255));
@@ -664,7 +681,7 @@ void setWandLightState(int lednum, int state, unsigned long currentMillis) {
       }
       break;
     case 14: // medium white flashing
-      if ((unsigned long)(currentMillis - prevFlashMillis7) >= wandMediumFlashInterval) {
+      if ((unsigned long)(currentMillis - prevFlashMillis9) >= wandMediumFlashInterval) {
         prevFlashMillis9 = currentMillis;
         if ( flashState9 == false ) {
           wandLights.setPixelColor(lednum, wandLights.Color(255, 255, 255));
@@ -675,6 +692,21 @@ void setWandLightState(int lednum, int state, unsigned long currentMillis) {
         }
       }
       break;
+       case 15: // white flashing - instant flash
+      if ((unsigned long)(currentMillis - prevFlashMillis10) >= instantFlashInterval) {
+        
+        if ( flashState10 == false ) {
+             wandLights.setPixelColor(lednum, wandLights.Color(255, 255, 255));
+          flashState10 = true; 
+          
+        } else {
+          wandLights.setPixelColor(lednum, 0);
+          flashState10 = false;
+         prevFlashMillis10 = currentMillis;
+        }
+      }
+      break;
+
 
 
 
