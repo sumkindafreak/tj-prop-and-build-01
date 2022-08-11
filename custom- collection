@@ -373,7 +373,9 @@ void loop() {
         if (safe2 == LOW) {
           safeTwo = true;
           Serial.println("safety 2 on");
-          WAND_ledstate3();
+          // WAND_ledstate3();
+          setWandLightState(17, 2, 0);
+          //setWandLightState(18, 1, 0);
           // mp3.play(11);
         } else {
           if (safeTwo) {
