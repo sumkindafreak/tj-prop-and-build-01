@@ -35,6 +35,7 @@ int  PM_TIME =  800;       // time to max power in milliseconds
 int meterlevel = 0;
 unsigned long lastMeterResetTime;
 bool safeOff = true;
+bool  safeTwo = true;
 int seq_1_current = 0;  // current led in sequence 1
 unsigned long firing_interval = 40;     // interval at which to cycle firing lights on the bargraph. We update this in the loop to speed up the animation so must be declared here (milliseconds).
 
@@ -370,9 +371,17 @@ void loop() {
         //mp3.play(11);
         int safe2 = digitalRead (SAFETY_TWO);
         if (safe2 == LOW) {
+          safeTwo = true;
           Serial.println("safety 2 on");
           WAND_ledstate3();
-         // mp3.play(11);
+          // mp3.play(11);
+        } else {
+          if (safeTwo) {
+            setWandLightState(13, 4, 0);    //  vent start off
+            setWandLightState(14, 4, 0);    //  vent mid   off
+            setWandLightState(15, 4, 0);    // vent end   off
+            safeTwo = false;
+          }
         }
       }
       else {
