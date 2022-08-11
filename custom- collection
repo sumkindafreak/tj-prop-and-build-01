@@ -51,9 +51,9 @@ const int OrangeHatLED = 19;
 const int GunLEDStart = 20;
 const int GunLEDEnd = 26;
 unsigned long firePrev, firingTimer = 0;
-bool play14=false;
+bool play14 = false;
 // Vent + Wand LED Count
-const int NeoPixelLEDCount2 = 27;
+const int NeoPixelLEDCount2 = 26;
 
 #define NEO_WAND 4 // for powercell
 Adafruit_NeoPixel wandLights = Adafruit_NeoPixel(NeoPixelLEDCount2, NEO_WAND, NEO_GRB + NEO_KHZ800);
@@ -381,17 +381,34 @@ void loop() {
           int fire = digitalRead (FIRE_PIN);
           if (fire == LOW) { // firing squad lol
             firingTimer = millis();
-            Serial.println("fire button pressed");
-            if (firingTimer - firePrev > 10000) {
+
+            if (firingTimer - firePrev < 10000) {
+              Serial.println("fire button pressed less than 10 sec");
               firePrev = millis();
+              fireStrobe(currentMillis);
+              barGraphSequenceTwo(currentMillis);
+              //mp3.play(17);
+            }
+            if (firingTimer - firePrev > 20000) {
+                Serial.println("fire button pressed greater than 20 sec");
+              setVentLightState(ventStart, ventEnd, 0);
+              WAND_LEDstateOFF();
+             // mp3.play(2);
+              barGraphCHARGING (currentMillis);
+              wand_charge();
+            }
+            else if (firingTimer - firePrev > 10000) {
+                Serial.println("fire button pressed greater than 10 sec");
+              firePrev = millis();
+              mp3.play(18);
               play14 = true;
             }
-            fireStrobe(currentMillis);
-            //mp3.play(17);
+
           }
           else {
             if (play14) {
               Serial.println("fire button released before 10 seconds");
+              clearGunLEDs();
               play14 = false;
               // mp3.play(14);
             }
@@ -702,6 +719,13 @@ const unsigned long fire_interval = 50;     // interval at which to cycle lights
 int fireSeqNum = 0;
 int fireSeqTotal = 5;
 
+void clearGunLEDs()
+{
+  for (int i = GunLEDStart; i <= GunLEDEnd; i++) {
+    wandLights.setPixelColor(i, 0);
+  }
+}
+
 void fireStrobe(unsigned long currentMillis) {
   if ((unsigned long)(currentMillis - prevFireMillis) >= fire_interval) {
     prevFireMillis = currentMillis;
@@ -721,7 +745,7 @@ void fireStrobe(unsigned long currentMillis) {
         wandLights.setPixelColor(21, wandLights.Color(255, 0, 0));
         wandLights.setPixelColor(22, wandLights.Color(255, 255, 255));
         wandLights.setPixelColor(23, wandLights.Color(255, 0, 0));
-        wandLights.setPixelColor(24, wandLights.Color(255, 255, 255));
+        wandLights.setPixelColor(24, wandLights.Color(0, 0, 255));
         wandLights.setPixelColor(25, wandLights.Color(255, 0, 0));
         wandLights.setPixelColor(26, wandLights.Color(255, 255, 255));
         break;
@@ -738,7 +762,7 @@ void fireStrobe(unsigned long currentMillis) {
         wandLights.setPixelColor(20, wandLights.Color(0, 0, 255));
         wandLights.setPixelColor(21, wandLights.Color(255, 0, 0));
         wandLights.setPixelColor(22, wandLights.Color(255, 255, 255));
-        wandLights.setPixelColor(23, wandLights.Color(255, 0, 0));
+        wandLights.setPixelColor(23, wandLights.Color(255, 0, 255));
         wandLights.setPixelColor(24, wandLights.Color(255, 255, 255));
         wandLights.setPixelColor(25, wandLights.Color(255, 0, 0));
         wandLights.setPixelColor(26, wandLights.Color(255, 255, 255));
