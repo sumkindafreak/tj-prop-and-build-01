@@ -381,25 +381,24 @@ void loop() {
           int fire = digitalRead (FIRE_PIN);
           if (fire == LOW) { // firing squad lol
             firingTimer = millis();
-
             if (firingTimer - firePrev < 10000) {
               Serial.println("fire button pressed less than 10 sec");
-              firePrev = millis();
+              //firePrev = millis();
               fireStrobe(currentMillis);
               barGraphSequenceTwo(currentMillis);
-              //mp3.play(17);
+              mp3.play(17);
             }
             if (firingTimer - firePrev > 20000) {
-                Serial.println("fire button pressed greater than 20 sec");
+              Serial.println("fire button pressed greater than 20 sec");
               setVentLightState(ventStart, ventEnd, 0);
               WAND_LEDstateOFF();
-             // mp3.play(2);
+              // mp3.play(2);
               barGraphCHARGING (currentMillis);
               wand_charge();
             }
-            else if (firingTimer - firePrev > 10000) {
-                Serial.println("fire button pressed greater than 10 sec");
-              firePrev = millis();
+            if (firingTimer - firePrev > 10000 && firingTimer - firePrev > 20000) {
+              Serial.println("fire button pressed greater than 10 sec");
+              // firePrev = millis();
               mp3.play(18);
               play14 = true;
             }
@@ -410,6 +409,7 @@ void loop() {
               Serial.println("fire button released before 10 seconds");
               clearGunLEDs();
               play14 = false;
+              firePrev = millis();
               // mp3.play(14);
             }
           }
