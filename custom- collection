@@ -24,7 +24,7 @@
 
 SerialMP3Player mp3(RX, TX);
 
-
+bool playOnce = true;
 // Create a new POWERCELL object
 #define PM_PIN      3        // input pin Powercell strips are attached to
 #define PM_PIXELS   14     // total number of neopixels in powercell
@@ -386,7 +386,10 @@ void loop() {
               //firePrev = millis();
               fireStrobe(currentMillis);
               barGraphSequenceTwo(currentMillis);
-              mp3.play(17);
+              if (playOnce) {
+                mp3.play(17);
+                playOnce = false;
+              }
             }
             if (firingTimer - firePrev > 20000) {
               Serial.println("fire button pressed greater than 20 sec");
@@ -396,11 +399,12 @@ void loop() {
               barGraphCHARGING (currentMillis);
               wand_charge();
             }
-            if (firingTimer - firePrev > 10000 && firingTimer - firePrev > 20000) {
+            if (firingTimer - firePrev > 10000 && firingTimer - firePrev < 20000) {
               Serial.println("fire button pressed greater than 10 sec");
               // firePrev = millis();
               mp3.play(18);
               play14 = true;
+              playOnce = true;
             }
 
           }
