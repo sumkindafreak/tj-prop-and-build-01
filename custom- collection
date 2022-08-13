@@ -374,9 +374,9 @@ void loop() {
         if (safe2 == LOW) {
           safeTwo = true;
           Serial.println("safety 2 on");
-          // WAND_ledstate3();
+         clearGunLEDs();
           setWandLightState(17, 2, 0);
-          //setWandLightState(18, 1, 0);
+     //   setVentLightState(ventStart, ventEnd, 2);
           if (play11) {
             mp3.play(11);
             play11 = false;
@@ -388,44 +388,55 @@ void loop() {
               play2 = true;
               play18 = true;
               Serial.println("fire button pressed less than 10 sec");
-              //firePrev = millis();
-              fireStrobe(currentMillis);
+             //firePrev = millis();
+               fireStrobe(currentMillis);                                                       //fire
               barGraphSequenceTwo(currentMillis);
               if (playOnce) {
-                mp3.play(17);
+                mp3.play(18);
+               
                 playOnce = false;
               }
             }
-            if (firingTimer - firePrev > 20000) {
+            if (firingTimer - firePrev > 18000) {                                              //venting
               play18 = true;
               Serial.println("fire button pressed greater than 20 sec");
+              clearGunLEDs();     
               setVentLightState(ventStart, ventEnd, 0);
-              WAND_LEDstateOFF();
+               
+            
               if (play2) {
                 mp3.play(2);
                 play2 = false;
               }
-              barGraphCHARGING (currentMillis);
-              wand_charge();
+             
+          
+            
             }
-            if (firingTimer - firePrev > 10000 && firingTimer - firePrev < 20000) {
+            if (firingTimer - firePrev > 10000 && firingTimer - firePrev < 18000) {                //warning
               Serial.println("fire button pressed greater than 10 sec");
+              
               // firePrev = millis();
               if (play18) {
-                mp3.play(18);
+                mp3.play(17);
+              
+           
+              barGraphSequenceTwo(currentMillis);
                 play18 = false;
               }
               play14 = true;
               playOnce = true;
             }
-
+   fireStrobe(currentMillis);
+   
           }
           else {
             if (play14) {
               Serial.println("fire button released before 10 seconds");
               clearGunLEDs();
+           setVentLightState(ventStart, ventEnd, 2);
               firePrev = millis();
               mp3.play(14);
+               barGraphCHARGING (currentMillis);
               play14 = false;
             }
           }
@@ -435,6 +446,8 @@ void loop() {
             setWandLightState(13, 4, 0);    //  vent start off
             setWandLightState(14, 4, 0);    //  vent mid   off
             setWandLightState(15, 4, 0);    // vent end   off
+            clearGunLEDs();
+             barGraphCHARGING (currentMillis);
             safeTwo = false;
           }
         }
@@ -729,6 +742,12 @@ void setVentLightState(int startLed, int endLed, int state ) {
   wandLights.show();
 }
 
+void clearGunLEDs()
+{
+  for (int i = GunLEDStart; i <= GunLEDEnd; i++) {
+    wandLights.setPixelColor(i, 0);
+  }
+}
 
 /*************** Firing Animations *********************/
 unsigned long prevFireMillis = 0;
@@ -736,12 +755,6 @@ const unsigned long fire_interval = 50;     // interval at which to cycle lights
 int fireSeqNum = 0;
 int fireSeqTotal = 5;
 
-void clearGunLEDs()
-{
-  for (int i = GunLEDStart; i <= GunLEDEnd; i++) {
-    wandLights.setPixelColor(i, 0);
-  }
-}
 
 void fireStrobe(unsigned long currentMillis) {
   if ((unsigned long)(currentMillis - prevFireMillis) >= fire_interval) {
@@ -823,7 +836,7 @@ void wand_charge() {
   setWandLightState(17, 4, 0);    //  white led off
   setWandLightState(18, 4, 0);    // white led off
   setWandLightState(19, 10, currentMillis); // Set orange hat barrel flashing
-  setVentLightState(ventStart, ventEnd, 2);
+
 
 }
 
@@ -839,7 +852,7 @@ void WAND_ledstate2() {
   setWandLightState(17, 4, 0 );    //  white led flash
   setWandLightState(18, 1, 0);    // white led flash
   setWandLightState(19, 6, currentMillis); // Set orange hat barrel flashing
-  setVentLightState(ventStart, ventEnd, 2);
+
 }
 
 void WAND_ledstate3() {
@@ -853,7 +866,7 @@ void WAND_ledstate3() {
   setWandLightState(17, 14, currentMillis);    //  white led flash slow
   setWandLightState(18, 5, currentMillis);    // white led flash fals
   setWandLightState(19, 6, currentMillis); // Set orange hat barrel flashing
-  setVentLightState(ventStart, ventEnd, 2);
+
 
 }
 void WAND_LEDstateOFF() {
@@ -865,7 +878,7 @@ void WAND_LEDstateOFF() {
   setWandLightState(17, 4, 0);     // Top LED off
   setWandLightState(18, 4, 0); // set back led off
   setWandLightState(19, 4, 0);    //   orange hat light off
-  setVentLightState(ventStart, ventEnd, 2);  // off
+ 
 }
 
 
