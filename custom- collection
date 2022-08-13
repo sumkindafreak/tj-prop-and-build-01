@@ -24,7 +24,7 @@
 
 SerialMP3Player mp3(RX, TX);
 
-bool playOnce = true;
+bool playOnce, play2, play11, play18 = true;
 // Create a new POWERCELL object
 #define PM_PIN      3        // input pin Powercell strips are attached to
 #define PM_PIXELS   14     // total number of neopixels in powercell
@@ -377,11 +377,16 @@ void loop() {
           // WAND_ledstate3();
           setWandLightState(17, 2, 0);
           //setWandLightState(18, 1, 0);
-          // mp3.play(11);
+          if (play11) {
+            mp3.play(11);
+            play11 = false;
+          }
           int fire = digitalRead (FIRE_PIN);
           if (fire == LOW) { // firing squad lol
             firingTimer = millis();
             if (firingTimer - firePrev < 10000) {
+              play2 = true;
+              play18 = true;
               Serial.println("fire button pressed less than 10 sec");
               //firePrev = millis();
               fireStrobe(currentMillis);
@@ -392,17 +397,24 @@ void loop() {
               }
             }
             if (firingTimer - firePrev > 20000) {
+              play18 = true;
               Serial.println("fire button pressed greater than 20 sec");
               setVentLightState(ventStart, ventEnd, 0);
               WAND_LEDstateOFF();
-              // mp3.play(2);
+              if (play2) {
+                mp3.play(2);
+                play2 = false;
+              }
               barGraphCHARGING (currentMillis);
               wand_charge();
             }
             if (firingTimer - firePrev > 10000 && firingTimer - firePrev < 20000) {
               Serial.println("fire button pressed greater than 10 sec");
               // firePrev = millis();
-              mp3.play(18);
+              if (play18) {
+                mp3.play(18);
+                play18 = false;
+              }
               play14 = true;
               playOnce = true;
             }
@@ -412,12 +424,13 @@ void loop() {
             if (play14) {
               Serial.println("fire button released before 10 seconds");
               clearGunLEDs();
-              play14 = false;
               firePrev = millis();
-              // mp3.play(14);
+              mp3.play(14);
+              play14 = false;
             }
           }
         } else {
+          play11 = true;
           if (safeTwo) {
             setWandLightState(13, 4, 0);    //  vent start off
             setWandLightState(14, 4, 0);    //  vent mid   off
