@@ -1,0 +1,579 @@
+#include "afterlife_cyclotron.h"
+#include <Adafruit_NeoPixel.h>
+#include "SerialMP3Player.h"
+
+#define TX 2
+#define RX 7
+
+SerialMP3Player mp3(RX, TX);
+
+bool playOnce, play1,  play2, play9, play11, play16, play18, playsafe1, playsafe2, playwand, playwand2,startupsound = false;
+// Create a new POWERCELL object
+#define PM_PIN      3        // input pin Powercell strips are attached to
+#define PM_PIXELS   10    // total number of neopixels in powercell
+
+
+Adafruit_NeoPixel powercell = Adafruit_NeoPixel(PM_PIXELS, PM_PIN, NEO_GRB + NEO_KHZ800);
+int  PM_TIME =  800;       // time to max power in milliseconds
+int meterlevel = 0;
+
+unsigned long lastMeterResetTime;
+unsigned long lastResetTime;
+
+
+const int ventStart = 0;
+const int ventEnd = 6;
+const int barStart = 7;
+const int barEnd = 11;
+const int WhiteLED1 = 12;
+const int SloBloLED = 13;
+const int WhiteLED2 = 14;
+const int GunLEDStart = 15;
+const int GunLEDEnd = 15;
+
+unsigned long firePrev, firingTimer = 0;
+
+bool play14 = false;
+// Vent + Wand LED Count
+const int NeoPixelLEDCount2 = 16;
+
+#define NEO_WAND 4 // for wand
+Adafruit_NeoPixel wandLights = Adafruit_NeoPixel(NeoPixelLEDCount2, NEO_WAND, NEO_GRB + NEO_KHZ800);
+
+
+#define PIN 11          // Which pin on the Arduino is connected to the NeoPixels?
+#define FIRE_PIN  8     // Which pin on the Arduino is connected to the "overheat" signal?
+#define NUMPIXELS 24   // How many NeoPixels are attached to the Arduino?
+#define BRIGHTNESS 255  // How bright should the pixels be? (min = 0, max = 255)
+#define GROUP 2         // How big of a group of pixels do you want to rotate?
+#define INIT_SPD  255   // How slow do you want the animation to rotate at the beginning of the boot? (higher = slower, 255 max)
+#define IDLE_SPD  8  // How fast do you want the animation to rotate during "normal" operation (lower = faster, 0 min)
+#define HEAT_SPD 0      // How fast do you want the animation to rotate at overheat? (lower = faster, 0 min)
+#define BOOT_DLY  5000  // How long do you want the boot animation to last?
+#define HEAT_DLY  7000  // How long should the "overheat" ramp up last?
+
+// Create a new cyclotron object
+Cyclotron cyclotron(PIN, NUMPIXELS, GROUP, INIT_SPD);
+
+const int STARTPACK_SWITCH = 5;  // main power
+const int SAFETY_ONE = 10;
+const int MUSIC_SWITCH = 6; // music
+
+
+
+// Possible Pack states
+
+bool songplaying = true;
+bool power_up = false;
+bool startup = false;
+bool state1 = true;
+bool state2 = false;
+bool ventled = false;
+
+// physical switch states
+
+bool safety_one = false;
+bool safety_two = false;
+bool fire = false;
+bool warning = false;
+
+// mp3 timers
+
+const unsigned long mp3_delay = 5000;
+int song = 0;
+int lastvol = 0;
+const unsigned long bar_interval = 100;     // interval at which to cycle lights (milliseconds).
+
+
+void setup() {
+
+  mp3.begin(9600);        // start mp3-communication
+  delay(500);             // wait for init
+
+  mp3.sendCommand(CMD_SEL_DEV, 0, 2);   //select sd-card
+  delay(500);             // wait for init
+
+  //  for signal testing //
+  pinMode(13, OUTPUT);
+  // ***** Assign Proton Pack Switches / Buttons ***** //
+
+  pinMode(STARTPACK_SWITCH, INPUT_PULLUP);
+  digitalWrite(STARTPACK_SWITCH, HIGH);
+
+  pinMode(SAFETY_ONE, INPUT_PULLUP);
+  digitalWrite(SAFETY_ONE, HIGH);
+
+  pinMode(FIRE_PIN, INPUT_PULLUP);
+  digitalWrite(FIRE_PIN, HIGH);
+  pinMode(MUSIC_SWITCH, INPUT_PULLUP);
+  digitalWrite(MUSIC_SWITCH, HIGH);
+
+
+
+
+  //start the powercell
+  powercell.begin();
+  lastMeterResetTime = millis();
+  powercell.clear();
+
+  powercell_idle();
+  // ***** Configure LED's in wand lights (Including Vent LEDs) ***** //
+  wandLights.begin();
+  wandLights.setBrightness(140);
+  wandLights.show();
+
+
+  // *** cyclotron start ********
+  cyclotron.setBrightness(0, 0);
+  cyclotron.start();
+  cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
+  cyclotron.setBrightness(BRIGHTNESS, BOOT_DLY);
+
+
+
+
+}
+
+
+void loop()
+{
+  unsigned long currentMillis = millis();
+  int startpack = digitalRead (STARTPACK_SWITCH);
+  // song selection
+  int theme_switch = digitalRead(MUSIC_SWITCH);
+  cyclotron.update();
+  if (theme_switch == LOW  ) {
+    if (songplaying == true)
+      song ++;
+    if (song > 5)song = 1;
+    switch (song) {
+      case 1:
+        mp3.play(19);  //mckenna grace
+        break;
+      case 2:
+        mp3.play(17); // under the floor
+        break;
+      case 3 :
+        mp3.play(16);  // on our own
+        break;
+      case 4:
+        mp3.play(15); // epic gb
+        break;
+      case 5 :
+        mp3.play(14); // lifting me higher
+        break;
+     
+    }
+    songplaying = false;
+  } else songplaying = true;
+
+  if (startpack == LOW) { // if button is pressed
+    if (state1) {
+      cyclotron.update();
+      power_up = true;
+       startupsound = true;
+      cyclotron.setBrightness(BRIGHTNESS, BOOT_DLY);
+
+      
+      if ((power_up) && (startup == false)) {
+      if  (startupsound){
+        mp3.play(1);
+        startupsound = false;
+      }
+        startup = true;
+  
+      }
+    }
+    // ***********do not touch above this line ***********  SERIOUSLY!! ********** DONT! *********  PLEASE? ***************** 
+    
+    state1 = false;
+   PM_TIME =  800;
+ cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
+    cyclotron.update();
+
+   play9 = true;
+      powercell_idle();
+      setWandLightState(11, 0, 0); // Set slo blo on
+      setWandLightState(12, 15, currentMillis); // Set top
+
+      setWandLightState(14, 5, currentMillis); // front
+      bargraph(currentMillis);
+
+      
+   
+     int fire = digitalRead (FIRE_PIN);
+          if (fire == LOW) { // firing squad lol
+            firingTimer = millis();
+            play14 = true;
+            if (firingTimer - firePrev < 10000) {
+              Serial.println("fire button pressed less than 10 sec");
+             cyclotron.update();
+            cyclotron.setSpeed(HEAT_SPD, HEAT_DLY);
+              fireStrobe(currentMillis);
+          
+              if (playOnce) {
+                mp3.play(10);
+                playOnce = false;
+              }
+            } else if (firingTimer - firePrev > 10000 && firingTimer - firePrev < 20000) {
+              Serial.println("fire button pressed greater than 10 sec");
+             
+             fireStrobe(currentMillis);
+           PM_TIME = 400;
+             setWandLightState(13, 0, 0); 
+              if (play18) {
+                mp3.play(11);             
+                play18 = false;
+              }
+            
+
+            }
+            else if (firingTimer - firePrev > 20000) {
+            
+              Serial.println("fire button pressed greater than 20 sec");
+              setVentLightState(ventStart, ventEnd, 0);
+         
+             cyclotron.update();
+             // cyclotron.setSpeed(0, 0);
+              clearGunLEDs();
+              if (play2) {
+                mp3.play(13);
+                play2 = false;
+              }
+             vent_off();
+            
+            }
+
+
+          }
+          else {
+            firePrev = millis();// rest timer
+            playOnce = true;
+            play2 = true;
+            play18 = true;
+            if (play14) {
+              Serial.println("fire button released before 10 seconds");
+              clearGunLEDs();
+              setVentLightState(ventStart, ventEnd, 2);
+              cyclotron.update();
+              mp3.play(8);
+              play14 = false;
+            }
+
+    }
+
+    
+  }
+  else {
+    state1 = true;
+    if (play9) {
+      mp3.play(2);
+      play9 = false;
+    }
+    cyclotron.update();
+    WAND_LEDstateOFF();
+
+    cyclotron.setBrightness(0, BOOT_DLY);
+
+    powercell_off();
+
+    power_up = false;
+    startup = false;
+   
+    // mp3.pause();
+
+  }
+}
+
+
+
+
+
+/* -------------------------------------------------------------    SEQUENCES    -----------------------------------------------------------------*/
+
+void doCycle() {
+  lastMeterResetTime = millis();
+  meterlevel = 0;
+}
+void powercell_idle()
+{
+  unsigned long currentMillis = millis();
+  meterlevel = ((currentMillis - lastMeterResetTime) * PM_PIXELS) / PM_TIME;
+  if (meterlevel > PM_PIXELS)
+    doCycle();
+  for (int i = 0; i < PM_PIXELS; i++) {
+    // pixels.Color takes RGB values, from 0,0,0 up to 255,255,255
+    if (meterlevel >= i + 1)
+      powercell.setPixelColor(i, powercell.Color(0, 0, 200));
+    else
+      powercell.setPixelColor(i, powercell.Color(0, 0, 0));
+  }
+  powercell.show();
+}
+
+void powercell_off() {
+  unsigned long currentMillis = millis();
+  for (int i = 0; i < PM_PIXELS; i++)  {
+    powercell.setPixelColor(i,  powercell.Color(0, 0, 0));
+  }
+  powercell.show();
+}
+
+
+void WAND_LEDstateOFF() {
+  for (int i = barStart; i <= WhiteLED2; i++) {
+    wandLights.setPixelColor(i, 0);
+  }
+  wandLights.show();
+}
+
+
+
+/*************** Wand Light Helpers *********************
+    Modified from Eric Bankers source
+*/
+unsigned long prevFlashMillis = 0; // Last time we changed wand sequence 1
+unsigned long prevFlashMillis2 = 0; // Last time we changed wand sequence 2
+unsigned long prevFlashMillis3 = 0; // Last time we changed wand sequence 3
+unsigned long prevFlashMillis4 = 0; // Last time we changed wand sequence 4
+unsigned long prevFlashMillis5 = 0; // Last time we changed wand sequence 5
+unsigned long prevFlashMillis6 = 0; // Last time we changed wand sequence 6
+unsigned long prevFlashMillis7 = 0; // Last time we changed wand sequence 7
+unsigned long prevFlashMillis8 = 0; // Last time we changed wand sequence 8
+
+unsigned long prevFlashMillis10 = 0; // Last time we changed wand sequence 8
+bool flashState1 = false;
+bool flashState2 = false;
+bool flashState3 = false;
+bool flashState4 = false;
+bool flashState5 = false;
+bool flashState6 = false;
+bool flashState7 = false;
+bool flashState8 = false;
+bool flashState9 = false;
+bool flashState10 = false;
+const unsigned long wandFastFlashInterval = 200; // interval at which we flash the top led on the wand
+const unsigned long wandMediumFlashInterval = 700; // interval at which we flash the top led on the wand
+const unsigned long wandSlowFlashInterval = 1200; // interval at which we flash the slow led on the wand
+const unsigned long instantFlashInterval = 1300; // interval at which we flash the instant led on the wand
+void setWandLightState(int lednum, int state, unsigned long currentMillis) {
+  switch ( state ) {
+    case 0: // set led red
+      wandLights.setPixelColor(lednum, wandLights.Color(255, 0, 0));
+      break;
+    case 1: // set led white
+      wandLights.setPixelColor(lednum, wandLights.Color(255, 255, 255));
+      break;
+    case 2:
+      break;
+    case 3:
+    case 4: // set led off
+      wandLights.setPixelColor(lednum, 0);
+      break;
+    case 5: // fast white flashing
+      if ((unsigned long)(currentMillis - prevFlashMillis) >= wandFastFlashInterval) {
+        prevFlashMillis = currentMillis;
+        if ( flashState1 == false ) {
+          wandLights.setPixelColor(lednum, wandLights.Color(255, 255, 255));
+          flashState1 = true;
+        } else {
+          wandLights.setPixelColor(lednum, 0);
+          flashState1 = false;
+        }
+      }
+      break;
+    case 6:
+      break;
+    case 7:
+      break;
+    case 8:
+      break;
+    case 9:
+      break;
+      break;
+    case 12:
+      break;
+    case 13:
+      break;
+    case 14:
+      break;
+    case 15: // white flashing - instant flash
+      if ((unsigned long)(currentMillis - prevFlashMillis10) >= instantFlashInterval) {
+
+        if ( flashState10 == false ) {
+          wandLights.setPixelColor(lednum, wandLights.Color(255, 255, 255));
+          flashState10 = true;
+
+        } else {
+          wandLights.setPixelColor(lednum, 0);
+          flashState10 = false;
+          prevFlashMillis10 = currentMillis;
+        }
+      }
+      break;
+
+
+
+
+
+  }
+  wandLights.show();
+}
+/***************** Vent Light *************************
+  Modified from Eric Banker's source code
+*/
+void setVentLightState(int startLed, int endLed, int state ) {
+  switch ( state ) {
+    case 0: // set all leds to white
+      for (int i = ventStart; i <= ventEnd; i++) {
+        wandLights.setPixelColor(i, wandLights.Color(255, 255, 255));
+      }
+      // Set the relay to on while venting. If relay is off set the pin LOW
+
+      break;
+    case 1:
+      break;
+    case 2: // set all leds off
+      for (int i = ventStart; i <= ventEnd; i++) {
+        wandLights.setPixelColor(i, 0);
+      }
+      // Set the relay to OFF while not venting. If relay is onf set the pin HIGH
+
+      break;
+  }
+  wandLights.show();
+}
+
+void vent_on()
+{
+  setWandLightState(13, 1, 0); // Set slo blo on
+}
+void vent_off()
+{
+  setWandLightState(13, 4, 0); // Set slo blo on
+}
+
+/*************** Firing Animations *********************/
+unsigned long prevFireMillis = 0;
+const unsigned long fire_interval = 50;     // interval at which to cycle lights (milliseconds).
+int fireSeqNum = 0;
+int fireSeqTotal = 5;
+
+void clearGunLEDs()
+{
+  for (int i = GunLEDStart; i <= GunLEDEnd; i++) {
+    wandLights.setPixelColor(i, 0);
+  }
+}
+
+void fireStrobe(unsigned long currentMillis) {
+  if ((unsigned long)(currentMillis - prevFireMillis) >= fire_interval) {
+    prevFireMillis = currentMillis;
+
+    switch ( fireSeqNum ) {
+      case 0:
+        wandLights.setPixelColor(15, wandLights.Color(255, 255, 255));
+        break;
+      case 1:
+        wandLights.setPixelColor(15, wandLights.Color(0, 0, 255));
+        break;
+      case 2:
+        wandLights.setPixelColor(15, wandLights.Color(255, 0, 0));
+        break;
+      case 3:
+        wandLights.setPixelColor(15, wandLights.Color(0, 0, 255));
+        break;
+      case 4:
+        wandLights.setPixelColor(15, wandLights.Color(255, 0, 0));
+        break;
+      case 5:
+        wandLights.setPixelColor(15, wandLights.Color(255, 0, 255));
+        break;
+    }
+
+    wandLights.show();
+
+    fireSeqNum++;
+    if ( fireSeqNum > fireSeqTotal ) {
+      fireSeqNum = 0;
+    }
+  }
+}
+
+
+/******************************************* bargraph ***************
+
+    const int barStart = 7;
+    const int barEnd = 10;
+
+  *********************************************/
+
+
+unsigned long prevbarMillis = 0;
+
+int barSeqNum = 0;
+int barSeqTotal = 5;
+
+void clearbarLEDs()
+{
+  for (int i = barStart; i <= barEnd; i++) {
+    wandLights.setPixelColor(i, 0);
+  }
+}
+
+
+
+void bargraph (unsigned long currentMillis) {
+  if ((unsigned long)(currentMillis - prevbarMillis) >= bar_interval) {
+    prevbarMillis = currentMillis;
+
+
+    switch ( barSeqNum ) {
+      case 0:
+        wandLights.setPixelColor(7, wandLights.Color(255, 255, 0));
+        wandLights.setPixelColor(8, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(9, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(10, wandLights.Color(0, 0, 0));
+        break;
+      case 1:
+        wandLights.setPixelColor(7, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(8, wandLights.Color(255, 255, 0));
+        wandLights.setPixelColor(9, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(10, wandLights.Color(0, 0, 0));
+        break;
+      case 2:
+        wandLights.setPixelColor(7, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(8, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(9,  wandLights.Color(255, 255, 0));
+        wandLights.setPixelColor(10, wandLights.Color(0, 0, 0));
+        break;
+      case 3:
+        wandLights.setPixelColor(7, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(8, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(9, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(10, wandLights.Color(255, 255, 0));
+        break;
+      case 4:
+        wandLights.setPixelColor(7, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(8, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(9,  wandLights.Color(255, 255, 0));
+        wandLights.setPixelColor(10, wandLights.Color(0, 0, 0));
+        break;
+      case 5:
+        wandLights.setPixelColor(7, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(8, wandLights.Color(255, 255, 0));
+        wandLights.setPixelColor(9, wandLights.Color(0, 0, 0));
+        wandLights.setPixelColor(10, wandLights.Color(0, 0, 0));
+        break;
+
+
+    }
+
+    wandLights.show();
+
+    barSeqNum++;
+    if ( barSeqNum > barSeqTotal ) {
+      barSeqNum = 0;
+    }
+  }
+}
