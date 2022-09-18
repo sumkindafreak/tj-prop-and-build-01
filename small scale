@@ -7,11 +7,10 @@
 
 SerialMP3Player mp3(RX, TX);
 
-bool playOnce, play1,  play2, play9, play11, play16, play18, playsafe1, playsafe2, playwand, playwand2,startupsound = false;
+
 // Create a new POWERCELL object
 #define PM_PIN      3        // input pin Powercell strips are attached to
 #define PM_PIXELS   10    // total number of neopixels in powercell
-
 
 Adafruit_NeoPixel powercell = Adafruit_NeoPixel(PM_PIXELS, PM_PIN, NEO_GRB + NEO_KHZ800);
 int  PM_TIME =  800;       // time to max power in milliseconds
@@ -33,12 +32,13 @@ const int GunLEDEnd = 15;
 
 unsigned long firePrev, firingTimer = 0;
 
-bool play14 = false;
+
 // Vent + Wand LED Count
 const int NeoPixelLEDCount2 = 16;
 
 #define NEO_WAND 4 // for wand
 Adafruit_NeoPixel wandLights = Adafruit_NeoPixel(NeoPixelLEDCount2, NEO_WAND, NEO_GRB + NEO_KHZ800);
+
 
 
 #define PIN 11          // Which pin on the Arduino is connected to the NeoPixels?
@@ -59,34 +59,23 @@ const int STARTPACK_SWITCH = 5;  // main power
 const int SAFETY_ONE = 10;
 const int MUSIC_SWITCH = 6; // music
 
-
-
-// Possible Pack states
-
 bool songplaying = true;
-bool power_up = false;
-bool startup = false;
+bool startupsound = true;
+bool shutdown_sound = true;
+bool blast_sound = true;
 bool state1 = true;
-bool state2 = false;
-bool ventled = false;
-
-// physical switch states
-
-bool safety_one = false;
-bool safety_two = false;
-bool fire = false;
-bool warning = false;
-
+bool endfire_sound = false;
+bool warning_sound = true;
+bool vent_sound = false;
 // mp3 timers
 
 const unsigned long mp3_delay = 5000;
 int song = 0;
 int lastvol = 0;
-const unsigned long bar_interval = 100;     // interval at which to cycle lights (milliseconds).
+const unsigned long bar_interval = 200;     // interval at which to cycle lights (milliseconds).
 
 
 void setup() {
-
   mp3.begin(9600);        // start mp3-communication
   delay(500);             // wait for init
 
@@ -108,7 +97,7 @@ void setup() {
   pinMode(MUSIC_SWITCH, INPUT_PULLUP);
   digitalWrite(MUSIC_SWITCH, HIGH);
 
-
+ startupsound = true;
 
 
   //start the powercell
@@ -134,14 +123,116 @@ void setup() {
 
 }
 
-
-void loop()
-{
+void loop() {
   unsigned long currentMillis = millis();
+
   int startpack = digitalRead (STARTPACK_SWITCH);
+
+
+  if (startpack == LOW) { // if button is pressed
+
+    cyclotron.setBrightness(BRIGHTNESS, BOOT_DLY);
+    cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
+    cyclotron.update();
+    if  (startupsound) {
+      mp3.play(1);
+      startupsound = false;
+    }
+    powercell_idle();
+    setWandLightState(11, 0, 0); // Set slo blo on
+    setWandLightState(12, 15, currentMillis); // Set top
+    setWandLightState(14, 5, currentMillis); // front
+    bargraph(currentMillis);
+    shutdown_sound = true;
+   
+
+
+
+  int fire = digitalRead (FIRE_PIN);
+          if (fire == LOW) { // firing squad lol
+            endfire_sound = true;
+            firingTimer = millis();
+            
+              
+            
+            if (firingTimer - firePrev < 10000) {
+              Serial.println("fire button pressed less than 10 sec");
+             cyclotron.update();
+            cyclotron.setSpeed(HEAT_SPD, HEAT_DLY);
+              fireStrobe(currentMillis);
+          
+              if (blast_sound) {
+                mp3.play(10);  // blast
+                blast_sound = false;
+              }
+              
+            } else if (firingTimer - firePrev > 10000 && firingTimer - firePrev < 20000) {
+              Serial.println("fire button pressed greater than 10 sec");
+             
+             fireStrobe(currentMillis);
+          
+             setWandLightState(13, 0, 0); 
+              if (warning_sound) {
+                mp3.play(11);         // warning     
+                warning_sound = false;
+              }
+            
+
+            }
+            else if (firingTimer - firePrev > 20000) {
+            
+              Serial.println("fire button pressed greater than 20 sec");
+              setVentLightState(ventStart, ventEnd, 0);
+         
+             cyclotron.update();
+             // cyclotron.setSpeed(0, 0);
+              clearGunLEDs();
+              if (vent_sound) {
+                mp3.play(13);  // vent
+                vent_sound = false;
+              }
+             vent_off();
+            
+            }
+
+
+          }
+          else {
+            firePrev = millis();// reset timer
+           vent_sound = true;
+           warning_sound = true;
+           blast_sound = true; 
+            
+          
+              Serial.println("fire button released before 10 seconds");
+              clearGunLEDs();
+                vent_off();
+              setVentLightState(ventStart, ventEnd, 2);
+              cyclotron.update();
+               if (endfire_sound) {
+              mp3.play(8);  // endfire
+              endfire_sound = false;
+            }
+    vent_sound = true;
+           warning_sound = true;
+           blast_sound = true; 
+    }
+  }
+  else {
+    cyclotron.update();
+    WAND_LEDstateOFF();
+    cyclotron.setBrightness(0, BOOT_DLY);
+    powercell_off();
+
+    if (shutdown_sound) {
+      mp3.play(2);
+      shutdown_sound = false;
+    }
+ startupsound = true;
+
   // song selection
   int theme_switch = digitalRead(MUSIC_SWITCH);
-  cyclotron.update();
+
   if (theme_switch == LOW  ) {
     if (songplaying == true)
       song ++;
@@ -162,128 +253,14 @@ void loop()
       case 5 :
         mp3.play(14); // lifting me higher
         break;
-     
+
     }
     songplaying = false;
   } else songplaying = true;
 
-  if (startpack == LOW) { // if button is pressed
-    if (state1) {
-      cyclotron.update();
-      power_up = true;
-       startupsound = true;
-      cyclotron.setBrightness(BRIGHTNESS, BOOT_DLY);
-
-      
-      if ((power_up) && (startup == false)) {
-      if  (startupsound){
-        mp3.play(1);
-        startupsound = false;
-      }
-        startup = true;
-  
-      }
-    }
-    // ***********do not touch above this line ***********  SERIOUSLY!! ********** DONT! *********  PLEASE? ***************** 
-    
-    state1 = false;
-   PM_TIME =  800;
- cyclotron.setSpeed(IDLE_SPD, BOOT_DLY);
-    cyclotron.update();
-
-   play9 = true;
-      powercell_idle();
-      setWandLightState(11, 0, 0); // Set slo blo on
-      setWandLightState(12, 15, currentMillis); // Set top
-
-      setWandLightState(14, 5, currentMillis); // front
-      bargraph(currentMillis);
-
-      
-   
-     int fire = digitalRead (FIRE_PIN);
-          if (fire == LOW) { // firing squad lol
-            firingTimer = millis();
-            play14 = true;
-            if (firingTimer - firePrev < 10000) {
-              Serial.println("fire button pressed less than 10 sec");
-             cyclotron.update();
-            cyclotron.setSpeed(HEAT_SPD, HEAT_DLY);
-              fireStrobe(currentMillis);
-          
-              if (playOnce) {
-                mp3.play(10);
-                playOnce = false;
-              }
-            } else if (firingTimer - firePrev > 10000 && firingTimer - firePrev < 20000) {
-              Serial.println("fire button pressed greater than 10 sec");
-             
-             fireStrobe(currentMillis);
-           PM_TIME = 400;
-             setWandLightState(13, 0, 0); 
-              if (play18) {
-                mp3.play(11);             
-                play18 = false;
-              }
-            
-
-            }
-            else if (firingTimer - firePrev > 20000) {
-            
-              Serial.println("fire button pressed greater than 20 sec");
-              setVentLightState(ventStart, ventEnd, 0);
-         
-             cyclotron.update();
-             // cyclotron.setSpeed(0, 0);
-              clearGunLEDs();
-              if (play2) {
-                mp3.play(13);
-                play2 = false;
-              }
-             vent_off();
-            
-            }
-
-
-          }
-          else {
-            firePrev = millis();// rest timer
-            playOnce = true;
-            play2 = true;
-            play18 = true;
-            if (play14) {
-              Serial.println("fire button released before 10 seconds");
-              clearGunLEDs();
-              setVentLightState(ventStart, ventEnd, 2);
-              cyclotron.update();
-              mp3.play(8);
-              play14 = false;
-            }
-
-    }
-
-    
-  }
-  else {
-    state1 = true;
-    if (play9) {
-      mp3.play(2);
-      play9 = false;
-    }
-    cyclotron.update();
-    WAND_LEDstateOFF();
-
-    cyclotron.setBrightness(0, BOOT_DLY);
-
-    powercell_off();
-
-    power_up = false;
-    startup = false;
-   
-    // mp3.pause();
-
   }
 }
+
 
 
 
